@@ -12,6 +12,12 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://gnu.org/licenses/gpl-2.0.txt>
+//
+// Changelog by Elias Ruemmler (e.ruemmler@rc-art.de)
+// 2016/08/01 Implement D_Width, for work with non monospaced fonts
+// 2016/08/03 Check for FontForge generated fonts to fix the offset bug
+//
+// Forked repository: https://github.com/RcArtSolutions/rpi-rgb-led-matrix
 
 #include "graphics.h"
 
@@ -28,8 +34,10 @@ typedef uint32_t rowbitmap_t;
 
 namespace rgb_matrix {
 struct Font::Glyph {
-  int width, height;
+  int width;
+  int height;
   int y_offset;
+  int d_width;  // width incl. spacing behind glyph.
   rowbitmap_t bitmap[0];  // contains 'height' elements.
 };
 
@@ -50,35 +58,43 @@ bool Font::LoadFont(const char *path) {
   uint32_t codepoint;
   char buffer[1024];
   int dummy;
+  bool kill_x_offset = false;
+
   Glyph tmp;
   Glyph *current_glyph = NULL;
+
   int row = 0;
   int x_offset = 0;
   int bitmap_shift = 0;
+
   while (fgets(buffer, sizeof(buffer), f)) {
-    if (sscanf(buffer, "FONTBOUNDINGBOX %d %d %d %d",
-               &dummy, &font_height_, &dummy, &base_line_) == 4) {
+    if (strncmp(buffer, "FOUNDRY \"FontForge\"", strlen("FOUNDRY \"FontForge\"")) == 0) {
+      kill_x_offset = true;
+    }
+    else if (sscanf(buffer, "FONTBOUNDINGBOX %d %d %d %d", &dummy, &font_height_, &dummy, &base_line_) == 4) {
       base_line_ += font_height_;
     }
     else if (sscanf(buffer, "ENCODING %ud", &codepoint) == 1) {
       // parsed.
     }
-    else if (sscanf(buffer, "BBX %d %d %d %d", &tmp.width, &tmp.height,
-                    &x_offset, &tmp.y_offset) == 4) {
-      current_glyph = (Glyph*) malloc(sizeof(Glyph)
-                                      + tmp.height * sizeof(rowbitmap_t));
+    else if (sscanf(buffer, "DWIDTH %d %d", &tmp.d_width, &dummy) == 2) {
+      // parsed.
+    }
+    else if (sscanf(buffer, "BBX %d %d %d %d", &tmp.width, &tmp.height, &x_offset, &tmp.y_offset) == 4) {
+      current_glyph = (Glyph*) malloc(sizeof(Glyph) + tmp.height * sizeof(rowbitmap_t));
+      if (kill_x_offset) {
+        x_offset = 0;
+      }
       *current_glyph = tmp;
       // We only get number of bytes large enough holding our width. We want
       // it always left-aligned.
-      bitmap_shift =
-        8 * (sizeof(rowbitmap_t) - ((current_glyph->width + 7) / 8)) + x_offset;
+      bitmap_shift = 8 * (sizeof(rowbitmap_t) - ((current_glyph->width + 7) / 8)) + x_offset;
       row = -1;  // let's not start yet, wait for BITMAP
     }
     else if (strncmp(buffer, "BITMAP", strlen("BITMAP")) == 0) {
       row = 0;
     }
-    else if (current_glyph && row >= 0 && row < current_glyph->height
-             && (sscanf(buffer, "%x", &current_glyph->bitmap[row]) == 1)) {
+    else if (current_glyph && row >= 0 && row < current_glyph->height && (sscanf(buffer, "%x", &current_glyph->bitmap[row]) == 1)) {
       current_glyph->bitmap[row] <<= bitmap_shift;
       row++;
     }
@@ -124,7 +140,7 @@ int Font::DrawGlyph(Canvas *c, int x_pos, int y_pos,
       }
     }
   }
-  return g->width;
+  return g->d_width;
 }
 
 int Font::DrawGlyph(Canvas *c, int x_pos, int y_pos, const Color &color,
