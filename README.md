@@ -126,7 +126,7 @@ for simplicity).
 Then for each panel, there is a set of (R1, G1, B1, R2, G2, B2) that you have
 to connect to the corresponding pins that are marked `[1]`, `[2]` and `[3]` for
 chain 1, 2, and 3 below.
-If you only connect one panel or have one chain, connect it to `[1]` (:smile:); if you
+If you only connect one panel or have one chain, connect it to `[1]` :red_circle:; if you
 use parallel chains, add the other `[2]` and `[3]`.
 
 To make things quicker to navigate visually, each chain is marked with a separate
